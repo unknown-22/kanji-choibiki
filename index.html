@@ -1,0 +1,378 @@
+<meta charset="utf-8">
+<title>漢字ちょい引き</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Klee+One:wght@600&family=BIZ+UDPGothic:wght@400;700&display=swap">
+<style>
+/* Layout: one-screen tool for a phone standing beside a notebook.
+   Big textbook-style glyph on top, same-reading candidates in the middle, a large hold-to-talk pad at the bottom. */
+:root{
+  --paper:#f4f6f8;      /* page ground, cool notebook grey */
+  --sheet:#ffffff;      /* raised surfaces */
+  --ink:#1c2433;        /* main text */
+  --ink-soft:#5b6578;   /* secondary text */
+  --rule:#d8dee7;       /* ruled-line borders */
+  --indigo:#2f4a8a;     /* accent: fountain-pen ink */
+  --indigo-wash:#e6ebf5;
+  --rec:#c8323c;        /* recording state */
+  --rec-wash:#fbe9ea;
+  --font-glyph:"Klee One","UD Digi Kyokasho N-R","YuKyokasho","Hiragino Mincho ProN",serif;
+  --font-ui:"BIZ UDPGothic","Hiragino Sans","Noto Sans JP",system-ui,sans-serif;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --paper:#11151c;--sheet:#1a202a;--ink:#e8ecf3;--ink-soft:#9aa4b6;--rule:#2c3442;
+  --indigo:#8fa8e6;--indigo-wash:#222c40;--rec:#ff6b72;--rec-wash:#3a1e22;color-scheme:dark}}
+:root[data-theme="dark"]{
+  --paper:#11151c;--sheet:#1a202a;--ink:#e8ecf3;--ink-soft:#9aa4b6;--rule:#2c3442;
+  --indigo:#8fa8e6;--indigo-wash:#222c40;--rec:#ff6b72;--rec-wash:#3a1e22;color-scheme:dark}
+
+html,body{height:100%}
+body{background:var(--paper);color:var(--ink);font-family:var(--font-ui);font-size:15px;line-height:1.6}
+.app{height:100%;box-sizing:border-box;display:flex;flex-direction:column;gap:12px;max-width:720px;margin:0 auto;
+  padding-block:12px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+
+header{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap}
+h1{font-size:15px;font-weight:700;margin:0;letter-spacing:.08em}
+.status{font-size:12px;color:var(--ink-soft);display:flex;gap:10px;flex-wrap:wrap}
+.status b{font-weight:400;color:var(--indigo)}
+
+/* result */
+.result{background:var(--sheet);border:1px solid var(--rule);border-radius:14px;padding:14px 16px 16px;display:flex;flex-direction:column;gap:6px;min-height:0}
+.result .meta{display:flex;justify-content:space-between;gap:8px;font-size:12px;color:var(--ink-soft);letter-spacing:.04em}
+.tag{font-size:11px;border:1px solid var(--rule);border-radius:99px;padding:0 8px}
+.reading{font-size:16px;color:var(--ink-soft);min-height:1.5em}
+.glyph{font-family:var(--font-glyph);font-weight:600;line-height:1.15;text-align:center;white-space:nowrap;overflow:hidden;
+  /* ruled guide lines like a writing sheet */
+  background-image:linear-gradient(var(--rule),var(--rule));background-size:100% 1px;background-repeat:no-repeat;background-position:0 100%;
+  padding-bottom:6px;min-height:1.2em}
+.phrase{display:flex;flex-wrap:wrap;justify-content:center;gap:2px 0;font-size:20px;font-family:var(--font-glyph);font-weight:600}
+.phrase span{padding:0 1px}
+.phrase button{font:inherit;color:var(--indigo);background:none;border:0;border-bottom:2px dotted var(--indigo);padding:0 3px;margin:0 1px;cursor:pointer;border-radius:3px}
+.phrase button[aria-pressed="true"]{background:var(--indigo-wash);border-bottom-style:solid}
+.alts{font-size:12px;color:var(--ink-soft);text-align:center}
+.alts button{font:inherit;color:var(--indigo);background:none;border:0;text-decoration:underline;cursor:pointer;padding:0 4px}
+
+/* homonyms */
+.homo{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;gap:6px}
+.homo h2{font-size:12px;font-weight:400;color:var(--ink-soft);margin:0;letter-spacing:.06em}
+.homo h2 strong{color:var(--ink);font-weight:700}
+.grid{overflow-y:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(88px,1fr));gap:8px;align-content:start;padding:2px}
+.grid button{font-family:var(--font-glyph);font-weight:600;font-size:26px;line-height:1.3;color:var(--ink);background:var(--sheet);
+  border:1px solid var(--rule);border-radius:10px;padding:8px 4px;cursor:pointer;min-width:0;overflow-wrap:anywhere}
+.grid button[aria-pressed="true"]{border-color:var(--indigo);box-shadow:inset 0 0 0 1px var(--indigo);color:var(--indigo)}
+.empty{font-size:13px;color:var(--ink-soft);padding:6px 2px}
+
+/* history */
+.hist{display:flex;gap:6px;overflow-x:auto;min-height:0;scrollbar-width:none}
+.hist:empty{display:none}
+.hist button{flex:0 0 auto;font-family:var(--font-glyph);font-weight:600;font-size:15px;background:none;color:var(--ink-soft);border:1px solid var(--rule);border-radius:99px;padding:2px 12px;cursor:pointer}
+
+/* talk pad */
+.talk{flex:0 0 auto;height:min(26vh,190px);min-height:120px;border-radius:18px;border:2px solid var(--indigo);background:var(--indigo-wash);color:var(--indigo);
+  font:700 20px/1.4 var(--font-ui);letter-spacing:.06em;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;cursor:pointer;
+  touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;transition:background .12s,border-color .12s,color .12s}
+.talk small{font-weight:400;font-size:13px;letter-spacing:0;color:var(--ink-soft);max-width:90%;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.talk.on{background:var(--rec-wash);border-color:var(--rec);color:var(--rec)}
+.talk.on .dot{animation:pulse 1s ease-in-out infinite}
+.dot{width:12px;height:12px;border-radius:50%;background:currentColor}
+.talk[disabled]{opacity:.55;cursor:not-allowed}
+@keyframes pulse{50%{transform:scale(1.6);opacity:.5}}
+@media (prefers-reduced-motion:reduce){.talk.on .dot{animation:none}}
+
+.bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.bar form{display:flex;gap:8px;flex:1 1 220px;min-width:0}
+.bar input{flex:1;min-width:0;font:16px var(--font-ui);color:var(--ink);background:var(--sheet);border:1px solid var(--rule);border-radius:10px;padding:8px 12px}
+.btn{font:700 14px var(--font-ui);border-radius:10px;padding:8px 14px;cursor:pointer;border:1px solid var(--rule);background:var(--sheet);color:var(--ink);white-space:nowrap}
+.btn.primary{background:var(--indigo);border-color:var(--indigo);color:var(--sheet)}
+.mode{display:flex;border:1px solid var(--rule);border-radius:10px;overflow:hidden}
+.mode button{font:13px var(--font-ui);background:var(--sheet);color:var(--ink-soft);border:0;padding:8px 10px;cursor:pointer}
+.mode button[aria-pressed="true"]{background:var(--indigo-wash);color:var(--indigo);font-weight:700}
+.note{font-size:12px;color:var(--rec);margin:0}
+:focus-visible{outline:2px solid var(--indigo);outline-offset:2px}
+</style>
+
+<div class="app">
+  <header>
+    <h1>漢字ちょい引き</h1>
+    <div class="status"><span id="st-dict">解析辞書：<b>読み込み中</b></span><span id="st-mic"></span></div>
+  </header>
+
+  <section class="result" aria-live="polite">
+    <div class="meta"><span id="r-label">表示中の語</span><span class="tag" id="r-tag">例</span></div>
+    <div class="reading" id="r-reading">はかる</div>
+    <div class="glyph" id="r-glyph">量る</div>
+    <div class="phrase" id="r-phrase"></div>
+    <div class="alts" id="r-alts" hidden></div>
+  </section>
+
+  <section class="homo">
+    <h2 id="h-title">同じ読み「<strong>はかる</strong>」の語</h2>
+    <div class="grid" id="h-grid"></div>
+  </section>
+
+  <div class="hist" id="hist" aria-label="最近調べた語"></div>
+
+  <p class="note" id="note" hidden></p>
+
+  <button class="talk" id="talk" type="button" aria-label="押している間 話す">
+    <span class="dot" aria-hidden="true"></span>
+    <span id="talk-label">押している間 話す</span>
+    <small id="talk-sub">例：「体重をはかる」と文で言うと、正しい漢字になりやすい</small>
+  </button>
+
+  <div class="bar">
+    <form id="kb">
+      <input id="kb-input" type="text" inputmode="text" autocomplete="off" enterkeyhint="search" placeholder="ひらがな または 文で入力" aria-label="読みや文を入力">
+      <button class="btn primary" type="submit">調べる</button>
+    </form>
+    <div class="mode" role="group" aria-label="録音のしかた">
+      <button type="button" id="m-hold" aria-pressed="true">長押し</button>
+      <button type="button" id="m-toggle" aria-pressed="false">タップで切替</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/kuromoji@0.1.2/build/kuromoji.js"></script>
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const store = {
+    get(k, d){ try{ const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); }catch(e){ return d; } },
+    set(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
+  };
+  const KANJI = /[㐀-鿿々]/;
+  const toHira = s => s.replace(/[ァ-ヶ]/g, c => String.fromCharCode(c.charCodeAt(0) - 0x60));
+  const isKana = s => /^[ぁ-ゖァ-ヶー]+$/.test(s);
+
+  /* ---------- dictionaries ---------- */
+  let homo = null, rev = null, tokenizer = null;
+  const homoReady = fetch("homonyms.json").then(r => r.json()).then(d => {
+    homo = {}; rev = {};
+    for (const r in d){ const ws = d[r].split("|"); homo[r] = ws; for (const w of ws) (rev[w] ||= []).push(r); }
+  }).catch(() => { homo = {}; rev = {}; });
+
+  function loadTokenizer(){
+    if (!window.kuromoji){ $("st-dict").innerHTML = "解析辞書：<b>読み込めません</b>"; return; }
+    // dictionary files are stored as *.dat.gz.wasm so the host serves them; point kuromoji's requests there
+    const open0 = XMLHttpRequest.prototype.open;
+    XMLHttpRequest.prototype.open = function(m, url, ...rest){
+      if (typeof url === "string" && /^dict\/[^/]+\.dat\.gz$/.test(url)) url += ".wasm";
+      return open0.call(this, m, url, ...rest);
+    };
+    kuromoji.builder({ dicPath: "dict/" }).build((err, t) => {
+      if (err){ $("st-dict").innerHTML = "解析辞書：<b>読み込めません</b>"; return; }
+      tokenizer = t; $("st-dict").innerHTML = "解析辞書：<b>準備完了</b>";
+      if (pendingText) lookup(pendingText, pendingAlts, pendingSrc);
+    });
+  }
+  setTimeout(loadTokenizer, 300);
+
+  /* ---------- state + render ---------- */
+  let pendingText = null, pendingAlts = [], pendingSrc = "";
+  let view = { phrase: [], selected: 0, word: "量る", reading: "はかる", alts: [], tag: "例" };
+
+  function readingOf(word, tokenReading){
+    const rs = rev && rev[word];
+    if (rs && rs.length){
+      if (tokenReading && rs.includes(tokenReading)) return tokenReading;
+      return rs[0];
+    }
+    return tokenReading || "";
+  }
+
+  function analyze(text){
+    // returns phrase parts: {surface, word?, reading?}
+    if (tokenizer){
+      return tokenizer.tokenize(text).map(t => {
+        if (!KANJI.test(t.surface_form)) return { surface: t.surface_form };
+        const base = (t.basic_form && t.basic_form !== "*") ? t.basic_form : t.surface_form;
+        const surfReading = t.reading ? toHira(t.reading) : "";
+        const word = (rev && rev[base]) ? base : t.surface_form;
+        const r = word === t.surface_form ? readingOf(word, surfReading) : readingOf(word, null);
+        return { surface: t.surface_form, word, reading: r };
+      });
+    }
+    if (rev && rev[text]) return [{ surface: text, word: text, reading: rev[text][0] }];
+    return [{ surface: text }];
+  }
+
+  function lookup(raw, alts = [], src = ""){
+    const text = raw.replace(/[\s。、．，!?！？]+$/g, "").replace(/^\s+/, "");
+    if (!text) return;
+    pendingText = null;
+    if (isKana(text)){
+      const r = toHira(text);
+      const ws = (homo && homo[r]) || [];
+      view = { phrase: [], selected: -1, word: ws[0] || text, reading: r, alts, tag: src, text };
+    } else {
+      if (!tokenizer){ pendingText = text; pendingAlts = alts; pendingSrc = src; }
+      const parts = analyze(text);
+      let sel = -1;
+      parts.forEach((p, i) => { if (p.word) sel = i; });   // the target word is usually last
+      const p = parts[sel];
+      view = { phrase: parts, selected: sel, word: p ? p.word : text, reading: p ? p.reading : "", alts, tag: src, text };
+    }
+    render();
+    remember(view.word, text);
+  }
+
+  function fitGlyph(){
+    const el = $("r-glyph"), box = el.parentElement.clientWidth - 32;
+    const n = [...el.textContent].length || 1;
+    const max = Math.min(window.innerHeight * 0.16, 150);
+    el.style.fontSize = Math.max(32, Math.min(max, box / n * 0.92)) + "px";
+  }
+
+  function render(){
+    $("r-tag").textContent = view.tag || "";
+    $("r-tag").hidden = !view.tag;
+    $("r-glyph").textContent = view.word;
+    $("r-reading").textContent = view.reading;
+    fitGlyph();
+
+    const ph = $("r-phrase"); ph.textContent = "";
+    if (view.phrase.length > 1 || (view.phrase[0] && view.phrase[0].surface !== view.word)){
+      view.phrase.forEach((p, i) => {
+        if (p.word){
+          const b = document.createElement("button");
+          b.type = "button"; b.textContent = p.surface;
+          b.setAttribute("aria-pressed", String(i === view.selected));
+          b.onclick = () => { view.selected = i; view.word = p.word; view.reading = p.reading; render(); };
+          ph.appendChild(b);
+        } else { const s = document.createElement("span"); s.textContent = p.surface; ph.appendChild(s); }
+      });
+    }
+
+    const al = $("r-alts"); al.textContent = "";
+    const others = (view.alts || []).filter(a => a && a !== view.text);
+    if (others.length){
+      al.append("ほかの聞き取り：");
+      others.forEach(a => { const b = document.createElement("button"); b.type = "button"; b.textContent = a; b.onclick = () => lookup(a, [], view.tag); al.appendChild(b); });
+    }
+    al.hidden = !others.length;
+
+    const r = view.reading, g = $("h-grid"); g.textContent = "";
+    const ws = (r && homo && homo[r]) ? homo[r].slice() : [];
+    if (view.word && KANJI.test(view.word) && !ws.includes(view.word)) ws.unshift(view.word);
+    $("h-title").innerHTML = r ? "同じ読み「<strong></strong>」の語" : "同じ読みの語";
+    if (r) $("h-title").querySelector("strong").textContent = r;
+    if (!ws.length){
+      const e = document.createElement("div"); e.className = "empty";
+      e.textContent = !r ? (tokenizer ? "漢字を含む語が見つかりませんでした。" : "解析辞書を読み込むと、文の中の語を選べます。")
+                         : "辞書にこの読みの語がありません。文で言い直すと見つかることがあります。";
+      g.appendChild(e);
+    }
+    ws.forEach(w => {
+      const b = document.createElement("button"); b.type = "button"; b.textContent = w;
+      b.setAttribute("aria-pressed", String(w === view.word));
+      b.onclick = () => { view.word = w; render(); };
+      g.appendChild(b);
+    });
+  }
+  window.addEventListener("resize", fitGlyph);
+
+  /* ---------- history ---------- */
+  let hist = store.get("kc-hist", []);
+  function remember(word, text){
+    if (!word || !KANJI.test(word)) return;
+    hist = [{ w: word, t: text }, ...hist.filter(h => h.w !== word)].slice(0, 12);
+    store.set("kc-hist", hist); renderHist();
+  }
+  function renderHist(){
+    const h = $("hist"); h.textContent = "";
+    hist.forEach(x => { const b = document.createElement("button"); b.type = "button"; b.textContent = x.w; b.title = x.t; b.onclick = () => lookup(x.t, [], "履歴"); h.appendChild(b); });
+  }
+
+  /* ---------- keyboard / OS dictation ---------- */
+  $("kb").addEventListener("submit", e => {
+    e.preventDefault();
+    const v = $("kb-input").value; if (!v.trim()) return;
+    lookup(v, [], "入力"); $("kb-input").select();
+  });
+
+  /* ---------- speech ---------- */
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const talk = $("talk");
+  let mode = store.get("kc-mode", "hold"), rec = null, listening = false, finals = [], interim = "", altsFinal = [];
+  function setMode(m){ mode = m; store.set("kc-mode", m);
+    $("m-hold").setAttribute("aria-pressed", String(m === "hold")); $("m-toggle").setAttribute("aria-pressed", String(m === "toggle"));
+    if (!listening) $("talk-label").textContent = m === "hold" ? "押している間 話す" : "タップして話す";
+  }
+  $("m-hold").onclick = () => setMode("hold"); $("m-toggle").onclick = () => setMode("toggle");
+  setMode(mode);
+
+  function micUnavailable(msg){
+    talk.disabled = true; stopUI();
+    $("talk-label").textContent = "音声入力を使えません";
+    $("talk-sub").textContent = "下の入力欄で、キーボードのマイク（音声入力）を使えます";
+    $("st-mic").innerHTML = "マイク：<b>使用不可</b>";
+    $("note").textContent = msg; $("note").hidden = false;
+  }
+
+  if (!SR){ micUnavailable("このブラウザは音声認識に対応していません。Android の Chrome で開くと使えます。"); }
+  else { $("st-mic").innerHTML = "マイク：<b>待機中</b>"; }
+
+  function stopUI(){ listening = false; talk.classList.remove("on"); setMode(mode); }
+
+  let wakeLock = null;
+  async function keepAwake(){ try{ if (!wakeLock && navigator.wakeLock) { wakeLock = await navigator.wakeLock.request("screen"); wakeLock.addEventListener("release", () => wakeLock = null); } }catch(e){} }
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && wakeLock === null && started) keepAwake(); });
+  let started = false;
+
+  function start(){
+    if (!SR || listening) return;
+    started = true; keepAwake();
+    finals = []; interim = ""; altsFinal = [];
+    rec = new SR(); rec.lang = "ja-JP"; rec.interimResults = true; rec.continuous = true; rec.maxAlternatives = 3;
+    rec.onresult = e => {
+      interim = "";
+      for (let i = e.resultIndex; i < e.results.length; i++){
+        const res = e.results[i];
+        if (res.isFinal){ finals.push(res[0].transcript); altsFinal = [...res].slice(1).map(a => a.transcript.trim()); }
+        else interim += res[0].transcript;
+      }
+      $("talk-sub").textContent = (finals.join("") + interim) || "聞いています…";
+    };
+    rec.onerror = e => {
+      if (e.error === "not-allowed" || e.error === "service-not-allowed" || e.error === "audio-capture")
+        micUnavailable("マイクの使用が許可されていません。このページ（共有されたアーティファクト）ではマイクが使えないため、HTTPS で公開した版で開くか、下の入力欄をお使いください。");
+      else if (e.error === "no-speech") $("talk-sub").textContent = "声が聞き取れませんでした。もう一度どうぞ";
+      else if (e.error === "network") $("talk-sub").textContent = "通信できませんでした（音声認識にはネット接続が必要です）";
+    };
+    rec.onend = () => {
+      const text = (finals.join("") || interim).trim();
+      stopUI();
+      if (text){ lookup(text, altsFinal, "音声"); $("talk-sub").textContent = "「" + text + "」"; }
+      $("st-mic").innerHTML = talk.disabled ? "マイク：<b>使用不可</b>" : "マイク：<b>待機中</b>";
+    };
+    try{ rec.start(); }catch(e){ return; }
+    listening = true; talk.classList.add("on");
+    $("talk-label").textContent = mode === "hold" ? "話してください（離すと検索）" : "話してください（もう一度タップで検索）";
+    $("talk-sub").textContent = "聞いています…";
+    $("st-mic").innerHTML = "マイク：<b>録音中</b>";
+  }
+  function stop(){ if (rec && listening){ try{ rec.stop(); }catch(e){} } }
+
+  talk.addEventListener("contextmenu", e => e.preventDefault());
+  talk.addEventListener("pointerdown", e => {
+    if (talk.disabled) return;
+    e.preventDefault();
+    if (mode === "hold"){ try{ talk.setPointerCapture(e.pointerId); }catch(_){} start(); }
+    else listening ? stop() : start();
+  });
+  const release = () => { if (mode === "hold") stop(); };
+  talk.addEventListener("pointerup", release);
+  talk.addEventListener("pointercancel", release);
+  talk.addEventListener("keydown", e => { if ((e.key === " " || e.key === "Enter") && !e.repeat){ e.preventDefault(); mode === "hold" ? start() : (listening ? stop() : start()); } });
+  talk.addEventListener("keyup", e => { if (e.key === " " || e.key === "Enter") release(); });
+
+  /* ---------- initial example ---------- */
+  homoReady.then(() => {
+    view = { phrase: [{surface:"体重",word:"体重",reading:"たいじゅう"},{surface:"を"},{surface:"量る",word:"量る",reading:"はかる"}],
+             selected: 2, word: "量る", reading: "はかる", alts: [], tag: "例" };
+    render(); renderHist();
+  });
+  render();
+})();
+</script>
